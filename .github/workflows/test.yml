@@ -1,0 +1,38 @@
+name: Manual Workflow with Inputs
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+      version:
+        description: 'Version to deploy'
+        required: false
+        default: 'latest'
+      force_deploy:
+        description: 'Force deployment?'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Display input values
+        run: |
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Version: ${{ github.event.inputs.version }}"
+          echo "Force deploy: ${{ github.event.inputs.force_deploy }}"
+
