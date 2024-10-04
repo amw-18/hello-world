@@ -3,22 +3,15 @@ name: Manual Workflow with Inputs
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Environment to deploy to'
+      pr_number:
+        description: 'PR to run workflow for'
         required: true
-        default: 'production'
-        type: choice
-        options:
-          - production
-          - staging
-          - development
-      version:
-        description: 'Version to deploy'
-        required: false
-        default: 'latest'
-      force_deploy:
-        description: 'Force deployment?'
-        required: false
+      test:
+        description: 'pytest command to run'
+        required: true
+      deploy_fresh_infra:
+        description: 'Is new infra required for this test?'
+        required: true
         type: boolean
         default: false
 
@@ -32,7 +25,7 @@ jobs:
 
       - name: Display input values
         run: |
-          echo "Environment: ${{ github.event.inputs.environment }}"
-          echo "Version: ${{ github.event.inputs.version }}"
-          echo "Force deploy: ${{ github.event.inputs.force_deploy }}"
+          echo "PR: ${{ github.event.inputs.pr_number }}"
+          echo "Command: ${{ github.event.inputs.test }}"
+          echo "Deploy: ${{ github.event.inputs.deploy_fresh_infra }}"
 
