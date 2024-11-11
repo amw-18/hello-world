@@ -1,0 +1,22 @@
+name: Passing outputs
+
+on:
+  workflow_dispatch:
+
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create output
+        run: |
+          echo "test_output1=hi" >> $GITHUB_OUTPUT
+
+  get:
+    needs: set
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read output
+
+        run: |
+          echo "${{ needs.set.outputs.test_output1 }}"
