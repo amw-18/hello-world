@@ -9,8 +9,10 @@ jobs:
   push-to-branches:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Push changes to other branches
         run: |
@@ -18,11 +20,14 @@ jobs:
           git config --local user.name "Github ci"
           git config --local user.email "team@joinmando.com"
 
+          git branch
+          git branch -r
+          
           # Push to other branches
           git checkout commit-ai
-          git merge main --no-ff
+          git merge master --no-ff
           git push origin commit-ai
 
           git checkout mando-ai-sandbox
-          git merge main --no-ff
+          git merge master --no-ff
           git push origin mando-ai-sandbox
