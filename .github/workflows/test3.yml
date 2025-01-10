@@ -18,6 +18,9 @@ jobs:
           git config --local user.name "Github ci"
           git config --local user.email "team@joinmando.com"
 
+          git branch
+          git branch -r
+          
           # Push to other branches
           git checkout commit-ai
           git merge main --no-ff
