@@ -1,0 +1,28 @@
+name: Push to Other Branches
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  push-to-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Push changes to other branches
+        run: |
+          # Configure git
+          git config --local user.name "Github ci"
+          git config --local user.email "team@joinmando.com"
+
+          # Push to other branches
+          git checkout commit-ai
+          git merge main --no-ff
+          git push origin commit-ai
+
+          git checkout mando-ai-sandbox
+          git merge main --no-ff
+          git push origin mando-ai-sandbox
