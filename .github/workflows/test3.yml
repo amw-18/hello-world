@@ -25,9 +25,9 @@ jobs:
           
           # Push to other branches
           git checkout commit-ai
-          git merge main --no-ff
+          git merge master --no-ff
           git push origin commit-ai
 
           git checkout mando-ai-sandbox
-          git merge main --no-ff
+          git merge master --no-ff
           git push origin mando-ai-sandbox
