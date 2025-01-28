@@ -29,7 +29,7 @@ jobs:
       - name: Configure Git
         run: |
           git config user.name "GitHub Actions Bot"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "team@joinmando.com"
           
       - name: Create and checkout temporary branch
         run: |
@@ -39,7 +39,7 @@ jobs:
       - name: Merge main into temporary branch
         run: |
           git fetch origin master
-          git merge origin/master --no-edit
+          git merge origin/master --no-ff
           
       - name: Push temporary branch
         run: |
