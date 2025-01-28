@@ -32,7 +32,7 @@ jobs:
             TEMP_BRANCH="auto-update/mando-ai-sandbox-from-main"
             git checkout -b $TEMP_BRANCH
             git merge master --no-ff
-            git push origin $TEMP_BRANCH
+            git push -u origin $TEMP_BRANCH
             
             # Create a pull request
             gh pr create --base mando-ai-sandbox --head $TEMP_BRANCH --title "Update mando-ai-sandbox from main" --body "This PR auto-updates the mando-ai-sandbox branch with changes from the main branch."
