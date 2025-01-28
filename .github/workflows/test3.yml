@@ -1,56 +1,39 @@
-name: Create Merge PR
+name: Push to Other Branches
 
 on:
-  workflow_dispatch:
-    inputs:
-      base_branch:
-        description: 'Base branch to create PR from'
-        required: true
-        type: string
-      temp_branch_name:
-        description: 'Name for the temporary branch'
-        required: true
-        type: string
-      pr_title:
-        description: 'Title for the Pull Request'
-        required: true
-        type: string
+  push:
+    branches:
+      - master
+      
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  create-merge-pr:
+  push-to-branch:
     runs-on: ubuntu-latest
-    
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
-      - name: Configure Git
+
+      - name: Push changes to other branches
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "team@joinmando.com"
-          
-      - name: Create and checkout temporary branch
-        run: |
-          git checkout ${{ inputs.base_branch }}
-          git checkout -b ${{ inputs.temp_branch_name }}
-          
-      - name: Merge main into temporary branch
-        run: |
-          git fetch origin master
-          git merge origin/master --no-ff
-          
-      - name: Push temporary branch
-        run: |
-          git push origin ${{ inputs.temp_branch_name }}
-          
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
-        with:
-          title: ${{ inputs.pr_title }}
-          body: |
-            Automated PR to merge master into ${{ inputs.base_branch }}
-          base: ${{ inputs.base_branch }}
-          branch: ${{ inputs.temp_branch_name }}
-          delete-branch: true
+            # Configure git
+            git config --local user.name "Github ci"
+            git config --local user.email "team@joinmando.com"
+            
+            # Checkout the branch and update it with main
+            git checkout mando-ai-sandbox
+            
+            # Push changes to a temporary branch
+            TEMP_BRANCH="auto-update/mando-ai-sandbox-from-main"
+            git checkout -b $TEMP_BRANCH
+            git merge master --no-ff
+            git push -u origin $TEMP_BRANCH
+            
+            # Create a pull request
+            gh pr create --base mando-ai-sandbox --head $TEMP_BRANCH --title "Update mando-ai-sandbox from main" --body "This PR auto-updates the mando-ai-sandbox branch with changes from the main branch."
