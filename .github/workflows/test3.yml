@@ -29,7 +29,7 @@ jobs:
             # Push changes to a temporary branch
             TEMP_BRANCH="auto-update/mando-ai-sandbox-from-main"
             git checkout -b $TEMP_BRANCH
-            git merge main --no-ff
+            git merge master --no-ff
             git push origin $TEMP_BRANCH
             
             # Create a pull request
