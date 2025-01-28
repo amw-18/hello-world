@@ -4,10 +4,15 @@ on:
   push:
     branches:
       - master
+      
+permissions:
+  contents: write
 
 jobs:
-  push-to-branches:
+  push-to-branch:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -16,18 +21,18 @@ jobs:
 
       - name: Push changes to other branches
         run: |
-          # Configure git
-          git config --local user.name "Github ci"
-          git config --local user.email "team@joinmando.com"
-
-          git branch
-          git branch -r
-          
-          # Push to other branches
-          git checkout commit-ai
-          git merge master --no-ff
-          git push origin commit-ai
-
-          git checkout mando-ai-sandbox
-          git merge master --no-ff
-          git push origin mando-ai-sandbox
+            # Configure git
+            git config --local user.name "Github ci"
+            git config --local user.email "team@joinmando.com"
+            
+            # Checkout the branch and update it with main
+            git checkout mando-ai-sandbox
+            
+            # Push changes to a temporary branch
+            TEMP_BRANCH="auto-update/mando-ai-sandbox-from-main"
+            git checkout -b $TEMP_BRANCH
+            git merge master --no-ff
+            git push -u origin $TEMP_BRANCH
+            
+            # Create a pull request
+            gh pr create --base mando-ai-sandbox --head $TEMP_BRANCH --title "Update mando-ai-sandbox from main" --body "This PR auto-updates the mando-ai-sandbox branch with changes from the main branch."
