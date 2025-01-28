@@ -1,38 +1,37 @@
-name: Push to Other Branches
+name: Merge Main into Temporary Branch
 
 on:
   push:
     branches:
       - master
-      
-permissions:
-  contents: write
 
 jobs:
-  push-to-branch:
+  create_temp_branch_and_merge:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Push changes to other branches
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v3
+
+      - name: Create Temporary Branch
+        id: temp_branch
+        uses: carlsberg/temporary-branch-action@1.1.3
+        with:
+          base: mando-ai-sandbox
+          push: true
+
+      - name: Merge main into Temporary Branch
         run: |
-            # Configure git
-            git config --local user.name "Github ci"
-            git config --local user.email "team@joinmando.com"
-            
-            # Checkout the branch and update it with main
-            git checkout mando-ai-sandbox
-            
-            # Push changes to a temporary branch
-            TEMP_BRANCH="auto-update/mando-ai-sandbox-from-main"
-            git checkout -b $TEMP_BRANCH
-            git merge master --no-ff
-            git push -u origin $TEMP_BRANCH
-            
-            # Create a pull request
-            gh pr create --base mando-ai-sandbox --head $TEMP_BRANCH --title "Update mando-ai-sandbox from main" --body "This PR auto-updates the mando-ai-sandbox branch with changes from the main branch."
+          git fetch origin master
+          git checkout ${{ steps.temp_branch.outputs.branch }}
+          git merge origin/master
+
+      - name: Push Temporary Branch
+        run: |
+          git push origin ${{ steps.temp_branch.outputs.branch }}
+
+      - name: Create Pull Request
+        uses: repo-sync/pull-request@v2
+        with:
+          destination_branch: "mando-ai-sandbox"
+          pr_title: "Merge changes from master into mando-ai-sandbox"
