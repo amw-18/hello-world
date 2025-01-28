@@ -1,41 +1,56 @@
-name: Merge Main into Temporary Branch
+name: Create Merge PR
 
 on:
-  push:
-    branches:
-      - master
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: 'Base branch to create PR from'
+        required: true
+        type: string
+      temp_branch_name:
+        description: 'Name for the temporary branch'
+        required: true
+        type: string
+      pr_title:
+        description: 'Title for the Pull Request'
+        required: true
+        type: string
 
 jobs:
-  create_temp_branch_and_merge:
+  create-merge-pr:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout main branch
+      - name: Checkout repository
         uses: actions/checkout@v3
-
-      - name: fix
-        run: |
-          git config --global --add safe.directory /github/workspace
-
-      - name: Create Temporary Branch
-        id: temp_branch
-        uses: carlsberg/temporary-branch-action@1.1.3
         with:
-          base: mando-ai-sandbox
-          push: true
-
-      - name: Merge main into Temporary Branch
+          fetch-depth: 0
+          
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+      - name: Create and checkout temporary branch
+        run: |
+          git checkout ${{ inputs.base_branch }}
+          git checkout -b ${{ inputs.temp_branch_name }}
+          
+      - name: Merge main into temporary branch
         run: |
           git fetch origin master
-          git checkout ${{ steps.temp_branch.outputs.branch }}
-          git merge origin/master
-
-      - name: Push Temporary Branch
+          git merge origin/master --no-edit
+          
+      - name: Push temporary branch
         run: |
-          git push origin ${{ steps.temp_branch.outputs.branch }}
-
+          git push origin ${{ inputs.temp_branch_name }}
+          
       - name: Create Pull Request
-        uses: repo-sync/pull-request@v2
+        uses: peter-evans/create-pull-request@v5
         with:
-          destination_branch: "mando-ai-sandbox"
-          pr_title: "Merge changes from master into mando-ai-sandbox"
+          title: ${{ inputs.pr_title }}
+          body: |
+            Automated PR to merge master into ${{ inputs.base_branch }}
+          base: ${{ inputs.base_branch }}
+          branch: ${{ inputs.temp_branch_name }}
+          delete-branch: true
