@@ -1,0 +1,79 @@
+name: extension-build
+
+# Every extension PR: check and build every flavour; zips are run artifacts, never committed.
+# Also called by extension-release with a stamped version.
+on:
+  pull_request:
+    paths: ["extension/**", ".github/workflows/extension-*.yml"]
+  workflow_call:
+    inputs:
+      ref: { type: string, required: true }
+      version: { type: string, required: true }
+      label: { type: string, required: true }
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
+
+      - name: No zips in git
+        run: |
+          if git ls-files | grep -E '\.zip$'; then
+            echo "::error::Zips are built by CI. Remove them from git."
+            exit 1
+          fi
+
+      - name: Check manifest
+        run: jq -e '.manifest_version == 3 and .version == "0.0.0"' extension/manifest.json
+
+      - name: Version
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_LABEL: ${{ inputs.label }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            version=$INPUT_VERSION
+            label=$INPUT_LABEL
+          else
+            # PR builds are never published, so they keep patch 0 and say which PR they are.
+            version="$(jq -r '.version | split(".")[0:2] | join(".")' extension/package.json).0"
+            label="pr-$PR_NUMBER"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "label=$label" >> "$GITHUB_OUTPUT"
+
+      - name: Build all flavours
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          LABEL: ${{ steps.v.outputs.label }}
+        run: extension/scripts/build.sh "$VERSION" "$LABEL" "$(git rev-parse --short HEAD)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-${{ steps.v.outputs.version }}-${{ steps.v.outputs.label }}
+          path: |
+            extension/out/*.zip
+            extension/out/SHA256SUMS
+            extension/out/permissions.json
+          if-no-files-found: error
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          LABEL: ${{ steps.v.outputs.label }}
+        run: |
+          {
+            echo "### Extension $VERSION ($LABEL)"
+            echo "Download the artifact below and load the flavour you need unpacked."
+            echo '```'
+            cat extension/out/SHA256SUMS
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

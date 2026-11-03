@@ -1,0 +1,9 @@
+{
+  "build_offset": 100,
+  "flavours": ["dev", "staging", "prod", "commit"],
+  "targets": {
+    "staging": { "zip": "dist-staging.zip", "item_id": "STAGING_ITEM_ID", "environment": "extension-staging", "publish": "auto" },
+    "prod":    { "zip": "dist-prod.zip",    "item_id": "PROD_ITEM_ID",    "environment": "extension-prod",    "publish": "approval" },
+    "commit":  { "zip": "dist-commit.zip",  "item_id": "COMMIT_ITEM_ID",  "environment": "extension-prod",    "publish": "approval" }
+  }
+}
