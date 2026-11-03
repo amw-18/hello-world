@@ -1,0 +1,96 @@
+name: extension-publish
+
+# Publishes an existing GitHub Release to one store listing. Prod and partner targets wait for
+# approval on their GitHub Environment; staging publishes straight away.
+# Without store secrets it runs as a dry run and only logs what it would send.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. ext/v1.0.101"
+        required: true
+      target:
+        type: choice
+        options: [prod, commit, staging]
+        required: true
+  workflow_call:
+    inputs:
+      tag: { type: string, required: true }
+      target: { type: string, required: true }
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.t.outputs.environment }}
+      zip: ${{ steps.t.outputs.zip }}
+      item_id: ${{ steps.t.outputs.item_id }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      TARGET: ${{ inputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve target
+        id: t
+        run: |
+          jq -e --arg t "$TARGET" '.targets[$t]' extension/release-targets.json > target.json \
+            || { echo "::error::Unknown target $TARGET"; exit 1; }
+          for k in environment zip item_id; do echo "$k=$(jq -r ".$k" target.json)" >> "$GITHUB_OUTPUT"; done
+
+      # Shown on the run page while the publish job waits, so the approver sees it first.
+      - name: What is being approved
+        run: |
+          gh release view "$TAG" --json name,url,body \
+            --jq '"### \(.name) → '"$TARGET"'\n\(.url)\n\n\(.body)"' >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.resolve.outputs.environment }}
+    concurrency:
+      group: extension-publish-${{ inputs.target }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      TARGET: ${{ inputs.target }}
+      ZIP: ${{ needs.resolve.outputs.zip }}
+      ITEM_ID: ${{ needs.resolve.outputs.item_id }}
+      CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+      REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+    steps:
+      - name: Download and verify the release zip
+        run: |
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "$ZIP" -p SHA256SUMS
+          sha256sum -c --ignore-missing SHA256SUMS
+          zip_version=$(unzip -p "$ZIP" manifest.json | jq -r .version)
+          [ "ext/v$zip_version" = "$TAG" ] || { echo "::error::$ZIP is $zip_version, not $TAG"; exit 1; }
+          unzip -p "$ZIP" manifest.json | jq -r '"Publishing \(.version_name)"'
+
+      - name: Store status check
+        run: |
+          if [ -z "$REFRESH_TOKEN" ]; then
+            echo "DRY RUN: would fetch the status of item $ITEM_ID and stop if a submission is still in review."
+            exit 0
+          fi
+          echo "::warning::Status check not wired up in this trial; it needs the Chrome Web Store API fetchStatus call."
+
+      - name: Upload and submit for review
+        run: |
+          if [ -z "$REFRESH_TOKEN" ]; then
+            echo "DRY RUN: would upload $ZIP ($TAG) to item $ITEM_ID ($TARGET), then submit it for review."
+            echo "DRY RUN: the store publishes it automatically once review passes."
+            echo "🧪 Dry run: $TAG → $TARGET (item $ITEM_ID)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          npm install -g chrome-webstore-upload-cli
+          chrome-webstore-upload upload --source "$ZIP" --extension-id "$ITEM_ID"
+          chrome-webstore-upload publish --extension-id "$ITEM_ID"
+          echo "✅ $TAG submitted to $TARGET (item $ITEM_ID)" >> "$GITHUB_STEP_SUMMARY"

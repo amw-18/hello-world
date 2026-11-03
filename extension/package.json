@@ -1,0 +1,9 @@
+{
+  "name": "hello-extension",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Toy Chrome extension for trying the CI release pipeline. CI owns the patch number; bump major.minor here at release cut.",
+  "scripts": {
+    "build": "scripts/build.sh"
+  }
+}
