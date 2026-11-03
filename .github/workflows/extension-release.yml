@@ -1,0 +1,149 @@
+name: extension-release
+
+# Every merge to master that touches the extension becomes a tagged GitHub Release and goes to staging.
+# Run it by hand with a ref to roll back: the old code is rebuilt under a new, higher version.
+on:
+  push:
+    branches: [master]
+    paths: ["extension/**"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or SHA to rebuild (rollback). It gets a new, higher version."
+        required: true
+
+concurrency:
+  group: extension-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      sha: ${{ steps.v.outputs.sha }}
+      label: ${{ steps.v.outputs.label }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      - name: Stamp version
+        id: v
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+          ROLLBACK_REF: ${{ inputs.ref }}
+        run: |
+          # Offset and major.minor come from master, so a rollback to old code still gets a higher number.
+          git fetch -q origin master
+          offset=$(git show origin/master:extension/release-targets.json | jq -r '.build_offset')
+          mm=$(git show origin/master:extension/package.json | jq -r '.version | split(".")[0:2] | join(".")')
+          version="$mm.$((RUN_NUMBER + offset))"
+
+          latest=$(git tag -l 'ext/v*' --sort=-version:refname | head -1 | sed 's#^ext/v##')
+          if [ -n "$latest" ] && { [ "$latest" = "$version" ] || [ "$(printf '%s\n%s\n' "$latest" "$version" | sort -V | tail -1)" != "$version" ]; }; then
+            echo "::error::$version is not higher than the latest release $latest. Raise build_offset in extension/release-targets.json."
+            exit 1
+          fi
+
+          label=$([ -n "$ROLLBACK_REF" ] && echo rollback || echo release)
+          {
+            echo "version=$version"
+            echo "sha=$(git rev-parse HEAD)"
+            echo "label=$label"
+          } >> "$GITHUB_OUTPUT"
+          echo "Stamped $version ($label) for $(git rev-parse --short HEAD); latest release was ${latest:-none}"
+
+  build:
+    needs: version
+    uses: ./.github/workflows/extension-build.yml
+    with:
+      ref: ${{ needs.version.outputs.sha }}
+      version: ${{ needs.version.outputs.version }}
+      label: ${{ needs.version.outputs.label }}
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.publish.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+      SHA: ${{ needs.version.outputs.sha }}
+      LABEL: ${{ needs.version.outputs.label }}
+      ROLLBACK_REF: ${{ inputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: extension-${{ needs.version.outputs.version }}-${{ needs.version.outputs.label }}
+          path: out
+
+      - name: Release notes and permission diff
+        run: |
+          prev=$(git tag -l 'ext/v*' --sort=-version:refname | head -1)
+          {
+            if [ -n "$ROLLBACK_REF" ]; then
+              echo "## Rollback"
+              echo "Rebuild of \`$ROLLBACK_REF\` ($(git rev-parse --short "$SHA")) as $VERSION."
+              if [ -n "$prev" ]; then
+                echo
+                echo "Undoes these changes since then:"
+                git log --first-parent --format='- %s (%h)' "$SHA..$(git rev-list -n1 "$prev")" -- extension/
+              fi
+            elif [ -n "$prev" ]; then
+              echo "## Changes since $prev"
+              git log --first-parent --format='- %s (%h)' "$(git rev-list -n1 "$prev")..$SHA" -- extension/
+            else
+              echo "## First release"
+            fi
+          } > notes.md
+
+          if [ -n "$prev" ] && gh release download "$prev" -p permissions.json -O prev-permissions.json; then
+            if ! diff <(jq -S . prev-permissions.json) <(jq -S . out/permissions.json) > perm.diff; then
+              {
+                echo
+                echo "## ⚠️ Permission change"
+                echo "The store will review this release more strictly, and users may be asked to re-approve."
+                echo '```diff'
+                cat perm.diff
+                echo '```'
+              } >> notes.md
+              echo "::warning::Permissions changed since $prev"
+            fi
+          fi
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tag and release
+        id: publish
+        run: |
+          tag="ext/v$VERSION"
+          gh release create "$tag" --target "$SHA" --title "Extension $VERSION ($LABEL)" --notes-file notes.md \
+            out/*.zip out/SHA256SUMS out/permissions.json
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  publish-staging:
+    needs: release
+    uses: ./.github/workflows/extension-publish.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+      target: staging
+    secrets: inherit
+
+  # A rollback goes on to prod too, through the same approval as any prod publish.
+  publish-prod:
+    needs: release
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/extension-publish.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+      target: prod
+    secrets: inherit
